@@ -1,0 +1,5 @@
+{
+  "name": "Graph Theory Explorer",
+  "description": "A comprehensive tool for visualizing and analyzing undirected graphs through vertex-edge models and adjacency matrices.",
+  "requestFramePermissions": []
+}
