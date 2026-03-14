@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
-import * as THREE from 'three';
 import { GraphData, Node as GraphNode, Edge as GraphEdge } from '../types';
 import { GraphDynamics } from '../math/dynamics';
 import { getLaplacianMatrix } from '../math/matrix';
@@ -26,8 +25,10 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width, height });
   const [dynamics, setDynamics] = useState<GraphDynamics | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     if (!containerRef.current) return;
     const observer = new ResizeObserver(entries => {
       if (entries[0]) {
@@ -45,7 +46,7 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
       const n = data?.nodes?.length || 0;
       const adjacency = Array.from({ length: n }, () => Array(n).fill(0));
       if (data?.edges) {
-        data.edges.forEach(e => {
+        (data.edges || []).forEach(e => {
           const sourceId = typeof e.source === 'object' ? (e.source as any).id : e.source;
           const targetId = typeof e.target === 'object' ? (e.target as any).id : e.target;
           if (sourceId < n && targetId < n) {
@@ -60,33 +61,21 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
       
       // Flatten the graph to 2D initially for wave/heat
       if (fgRef.current) {
-        const nodes = fgRef.current.graphData().nodes;
-        if (nodes) {
-          nodes.forEach((node: any) => {
-            node.fz = 0;
-          });
-        }
+        const gData = fgRef.current.graphData();
+        const nodes = gData ? gData.nodes : [];
+        (nodes || []).forEach((node: any) => {
+          node.fz = 0;
+        });
       }
     } else {
       setDynamics(null);
       // Release Z constraint for planar mode
       if (fgRef.current) {
-        const nodes = fgRef.current.graphData().nodes;
-        if (nodes) {
-          nodes.forEach((node: any) => {
-            node.fz = undefined;
-            
-            // Reset color and scale
-            if (node.__threeObj) {
-              const material = node.__threeObj.material as THREE.MeshLambertMaterial;
-              const color = showPartition && fiedlerVector && fiedlerVector[node.id] !== undefined
-                ? (fiedlerVector[node.id] > 0 ? '#818cf8' : '#fbbf24')
-                : '#E4E3E0';
-              material.color.set(color);
-              node.__threeObj.scale.set(1, 1, 1);
-            }
-          });
-        }
+        const gData = fgRef.current.graphData();
+        const nodes = gData ? gData.nodes : [];
+        (nodes || []).forEach((node: any) => {
+          node.fz = undefined;
+        });
       }
     }
   }, [data, mode, showPartition, fiedlerVector]);
@@ -113,41 +102,19 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
       const fg = fgRef.current;
       if (fg) {
         const u = dynamics.getValues();
-        const nodes = fg.graphData().nodes;
-        if (nodes) {
-          nodes.forEach((node: any) => {
-            if (node.__threeObj) {
-              const val = u[node.id] || 0;
-              
-              // In wave mode, we displace in Z. In heat mode, we change color/size.
-              if (mode === 'wave') {
-                // Base Z is 0 (we force 2D layout for wave mode)
-                const zPos = val * 20;
-                node.fz = zPos; // Scale amplitude
-                node.z = zPos;
-                node.__threeObj.position.z = zPos;
-                
-                // Color based on amplitude
-                const material = node.__threeObj.material as THREE.MeshLambertMaterial;
-                if (val > 0) {
-                  material.color.setHSL(0.6, 1, Math.min(1, 0.5 + val * 0.5)); // Blueish
-                } else {
-                  material.color.setHSL(0.0, 1, Math.min(1, 0.5 - val * 0.5)); // Reddish
-                }
-              } else if (mode === 'heat') {
-                // Heat is scalar value (0 to 1 usually)
-                const material = node.__threeObj.material as THREE.MeshLambertMaterial;
-                // Heat map: cold (blue) to hot (red)
-                const heat = Math.max(-1, Math.min(1, val));
-                material.color.setHSL((1 - heat) * 0.33, 1, 0.5);
-                
-                // Scale size slightly
-                const scale = 1 + Math.abs(heat);
-                node.__threeObj.scale.set(scale, scale, scale);
-              }
-            }
-          });
-        }
+        const gData = fg.graphData();
+        const nodes = gData ? gData.nodes : [];
+        (nodes || []).forEach((node: any) => {
+          const val = u[node.id] || 0;
+          node.val = val; // Store for color/size
+            
+          // In wave mode, we displace in Z.
+          if (mode === 'wave') {
+            const zPos = val * 20;
+            node.fz = zPos;
+            node.z = zPos;
+          }
+        });
         
         // Reheat simulation slightly to update links if nodes moved
         if (mode === 'wave') {
@@ -164,20 +131,7 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
 
   // Update colors when partition changes in planar mode
   useEffect(() => {
-    if (mode === 'planar' && fgRef.current) {
-      const nodes = fgRef.current.graphData().nodes;
-      if (nodes) {
-        nodes.forEach((node: any) => {
-          if (node.__threeObj) {
-            const material = node.__threeObj.material as THREE.MeshLambertMaterial;
-            const color = showPartition && fiedlerVector && fiedlerVector[node.id] !== undefined
-              ? (fiedlerVector[node.id] > 0 ? '#818cf8' : '#fbbf24')
-              : '#E4E3E0';
-            material.color.set(color);
-          }
-        });
-      }
-    }
+    // No-op, ForceGraph3D will re-render via nodeColor prop
   }, [showPartition, fiedlerVector, mode]);
   const handleNodeClick = (node: any) => {
     if (dynamics) {
@@ -195,36 +149,41 @@ export const GraphView3D: React.FC<GraphView3DProps> = ({
 
   return (
     <div ref={containerRef} className="border border-[#141414] bg-[#141414] overflow-hidden rounded-sm h-full w-full relative">
-      <ForceGraph3D
-        ref={fgRef}
-        width={dimensions.width}
-        height={dimensions.height}
-        graphData={graphData}
-        nodeLabel="label"
-        numDimensions={3} // Always 3D, we control Z manually for wave/heat
-        nodeRelSize={6}
-        nodeColor={(node: any) => {
-          if (showPartition && fiedlerVector && fiedlerVector[node.id] !== undefined) {
-            return fiedlerVector[node.id] > 0 ? '#818cf8' : '#fbbf24';
-          }
-          return '#E4E3E0';
-        }}
+      {mounted && dimensions.width > 0 && dimensions.height > 0 && (
+        <ForceGraph3D
+          ref={fgRef}
+          width={dimensions.width}
+          height={dimensions.height}
+          graphData={graphData}
+          nodeLabel="label"
+          nodeRelSize={6}
+          nodeColor={(node: any) => {
+            if (mode === 'wave') {
+              const val = node.val || 0;
+              const hue = val > 0 ? 0.6 : 0.0;
+              const lightness = 0.5 + Math.abs(val) * 0.5;
+              return `hsl(${hue * 360}, 100%, ${Math.min(100, lightness * 100)}%)`;
+            }
+            if (mode === 'heat') {
+              const heat = Math.max(-1, Math.min(1, node.val || 0));
+              const hue = (1 - heat) * 0.33;
+              return `hsl(${hue * 360}, 100%, 50%)`;
+            }
+            if (showPartition && fiedlerVector && fiedlerVector[node.id] !== undefined) {
+              return fiedlerVector[node.id] > 0 ? '#818cf8' : '#fbbf24';
+            }
+            return '#E4E3E0';
+          }}
+          nodeVal={(node: any) => {
+            if (mode === 'heat') return 1 + Math.abs(node.val || 0) * 5;
+            return 6;
+          }}
         linkColor={() => '#404040'}
         linkWidth={1}
         onNodeClick={handleNodeClick}
-        nodeThreeObject={(node: any) => {
-          const color = showPartition && fiedlerVector && fiedlerVector[node.id] !== undefined
-            ? (fiedlerVector[node.id] > 0 ? '#818cf8' : '#fbbf24')
-            : '#E4E3E0';
-          
-          const geometry = new THREE.SphereGeometry(4, 16, 16);
-          const material = new THREE.MeshLambertMaterial({ color });
-          const mesh = new THREE.Mesh(geometry, material);
-          node.__threeObj = mesh;
-          return mesh;
-        }}
         backgroundColor="#141414"
       />
+      )}
       
       {/* Overlay controls/info */}
       <div className="absolute top-4 left-4 text-[#E4E3E0] font-mono text-xs pointer-events-none">
