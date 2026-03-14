@@ -26,7 +26,14 @@ export interface GraphMetrics {
   components: number;
   isSimple: boolean;
   isComplete: boolean;
+  algebraicConnectivity?: number;
+  triangles?: number;
+  fiedlerVector?: number[];
+  spectrum?: number[];
+  fiedlerIndex?: number;
 }
+
+export type MatrixType = 'adjacency' | 'degree' | 'laplacian';
 
 export type BooleanOp = 'AND' | 'OR';
 

@@ -27,34 +27,36 @@ const FaultTolerancePanel: React.FC<FaultTolerancePanelProps> = ({
   onGlobalOpChange
 }) => {
   const activeCondition: FaultCondition = useMemo(() => {
-    if (conditions.length === 1) return conditions[0];
-    return { type: 'composite', op: globalOp, conditions };
+    const conds = conditions || [];
+    if (conds.length === 1) return conds[0];
+    return { type: 'composite', op: globalOp, conditions: conds };
   }, [conditions, globalOp]);
 
   const addAtomic = () => {
     const newCond: FaultCondition = { type: 'atomic', vertices: 1, edges: 0 };
-    onConditionsChange([...conditions, newCond]);
+    onConditionsChange([...(conditions || []), newCond]);
   };
 
   const removeCondition = (index: number) => {
-    onConditionsChange(conditions.filter((_, i) => i !== index));
+    onConditionsChange((conditions || []).filter((_, i) => i !== index));
   };
 
   const updateAtomic = (index: number, field: 'vertices' | 'edges', val: number) => {
-    const newConditions = [...conditions];
+    const newConditions = [...(conditions || [])];
     const cond = newConditions[index];
-    if (cond.type === 'atomic') {
+    if (cond && cond.type === 'atomic') {
       cond[field] = Math.max(0, Math.min(5, val));
       onConditionsChange(newConditions);
     }
   };
 
   const overallPassed = useMemo(() => {
-    if (conditions.length === 0) return true;
+    const conds = conditions || [];
+    if (conds.length === 0) return true;
     if (globalOp === 'AND') {
-      return conditions.every(c => evaluateFaultCondition(matrix, c));
+      return conds.every(c => evaluateFaultCondition(matrix, c));
     } else {
-      return conditions.some(c => evaluateFaultCondition(matrix, c));
+      return conds.some(c => evaluateFaultCondition(matrix, c));
     }
   }, [matrix, conditions, globalOp]);
 
@@ -87,7 +89,7 @@ const FaultTolerancePanel: React.FC<FaultTolerancePanelProps> = ({
         </div>
         
         <div className="flex gap-2">
-          {conditions.length > 1 && (
+          {(conditions || []).length > 1 && (
             <button 
               onClick={() => onGlobalOpChange(globalOp === 'AND' ? 'OR' : 'AND')}
               className={cn(
@@ -105,7 +107,7 @@ const FaultTolerancePanel: React.FC<FaultTolerancePanelProps> = ({
           >
             <Plus size={12} /> Add Rule
           </button>
-          {conditions.length > 0 && onHarden && (
+          {(conditions || []).length > 0 && onHarden && (
             <button 
               onClick={() => onHarden(activeCondition)}
               disabled={!isHardening && overallPassed}
@@ -125,13 +127,13 @@ const FaultTolerancePanel: React.FC<FaultTolerancePanelProps> = ({
       </div>
 
       <div className="flex flex-col gap-3">
-        {conditions.length === 0 ? (
+        {(conditions || []).length === 0 ? (
           <div className="py-8 border border-dashed border-[#141414]/20 flex flex-col items-center justify-center gap-2 opacity-40">
             <Shield size={24} />
             <span className="font-serif italic text-xs">No failure conditions defined</span>
           </div>
         ) : (
-          conditions.map((cond, idx) => {
+          (conditions || []).map((cond, idx) => {
             if (cond.type !== 'atomic') return null;
             const passed = evaluateFaultCondition(matrix, cond);
             

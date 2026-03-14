@@ -1,15 +1,23 @@
 import React, { useState, useMemo } from 'react';
-import { AdjacencyMatrix, FaultCondition, BooleanOp } from './types';
+import { AdjacencyMatrix, FaultCondition, BooleanOp, MatrixType } from './types';
 import { PRESETS, matrixToGraph, calculateMetrics, findMinimumHardeningEdges, HardeningSolution, cn, CutSet } from './utils';
+import { getDegreeMatrix, getLaplacianMatrix } from './math/matrix';
 import GraphView from './components/GraphView';
 import AdjacencyMatrixView from './components/AdjacencyMatrix';
 import MetricsPanel from './components/MetricsPanel';
 import FaultTolerancePanel from './components/FaultTolerancePanel';
-import { Settings, Grid3X3, Share2, Info, Plus, Minus, RefreshCw, Shield, Sliders, Zap, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { GraphView3D } from './components/GraphView3D';
+import { Settings, Grid3X3, Share2, Info, Plus, Minus, RefreshCw, Shield, Sliders, Zap, Lock, Unlock, AlertTriangle, Calculator, Activity, Box } from 'lucide-react';
 
 export default function App() {
   const [matrix, setMatrix] = useState<AdjacencyMatrix>(PRESETS['Triangle']);
   const [customSize, setCustomSize] = useState(5);
+  const [matrixViewType, setMatrixViewType] = useState<MatrixType>('adjacency');
+  const [showPartition, setShowPartition] = useState(false);
+  
+  // 3D View State
+  const [is3DMode, setIs3DMode] = useState(false);
+  const [view3DMode, setView3DMode] = useState<'planar' | 'wave' | 'heat'>('planar');
   
   // Physics Settings
   const [gravity, setGravity] = useState(-300);
@@ -35,8 +43,14 @@ export default function App() {
   const graphData = useMemo(() => matrixToGraph(matrix), [matrix]);
   const metrics = useMemo(() => calculateMetrics(matrix), [matrix]);
 
+  const displayMatrix = useMemo(() => {
+    if (matrixViewType === 'degree') return getDegreeMatrix(matrix);
+    if (matrixViewType === 'laplacian') return getLaplacianMatrix(matrix);
+    return matrix;
+  }, [matrix, matrixViewType]);
+
   const handleToggleEdge = (i: number, j: number) => {
-    if (i === j || isHardeningMode || failureScenario) return;
+    if (i === j || isHardeningMode || failureScenario || matrixViewType !== 'adjacency') return;
     const newMatrix = matrix.map(row => [...row]);
     const newVal = newMatrix[i][j] === 1 ? 0 : 1;
     newMatrix[i][j] = newVal;
@@ -182,6 +196,52 @@ export default function App() {
             <MetricsPanel metrics={metrics} />
           </section>
 
+          {/* Spectral Analysis */}
+          <section className="flex flex-col gap-4">
+            <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50 flex items-center gap-2">
+              <Activity size={14} />
+              Spectral Analysis
+            </h2>
+            <div className="flex flex-col gap-4 p-4 bg-[#E4E3E0] border border-[#141414] rounded-sm">
+              <div className="flex justify-between items-center">
+                <label className="font-serif italic text-[10px] uppercase tracking-widest opacity-60">
+                  Fiedler Partitioning
+                </label>
+                <button
+                  onClick={() => setShowPartition(!showPartition)}
+                  className={cn(
+                    "px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors border border-[#141414]",
+                    showPartition ? "bg-[#141414] text-[#E4E3E0]" : "hover:bg-slate-100"
+                  )}
+                >
+                  {showPartition ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              
+              {metrics.spectrum && (
+                <div className="flex flex-col gap-2">
+                  <label className="font-serif italic text-[10px] uppercase tracking-widest opacity-60">
+                    Laplacian Spectrum (Eigenvalues)
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {metrics.spectrum.map((val, idx) => (
+                      <div 
+                        key={idx} 
+                        className={cn(
+                          "px-2 py-1 font-mono text-[10px] border border-[#141414]",
+                          idx === (metrics.fiedlerIndex ?? 1) ? "bg-indigo-100 font-bold" : "bg-white/50"
+                        )}
+                        title={idx === (metrics.fiedlerIndex ?? 1) ? "Algebraic Connectivity (Fiedler Value)" : `Eigenvalue ${idx}`}
+                      >
+                        {val.toFixed(3)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* Physics Controls */}
           <section className="flex flex-col gap-4">
             <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50 flex items-center gap-2">
@@ -296,50 +356,111 @@ export default function App() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             {/* Graph Visualization */}
             <div className="flex flex-col gap-4">
-              <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50 flex justify-between items-center">
-                Vertex-Edge Model
-                {isHardeningMode && <span className="text-emerald-600 flex items-center gap-1"><Zap size={12} /> Showing Suggestions</span>}
-                {failureScenario && <span className="text-rose-600 flex items-center gap-1"><AlertTriangle size={12} /> Showing Vulnerability</span>}
-              </h2>
+              <div className="flex justify-between items-center">
+                <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50 flex items-center gap-2">
+                  Vertex-Edge Model
+                  {isHardeningMode && <span className="text-emerald-600 flex items-center gap-1"><Zap size={12} /> Showing Suggestions</span>}
+                  {failureScenario && <span className="text-rose-600 flex items-center gap-1"><AlertTriangle size={12} /> Showing Vulnerability</span>}
+                </h2>
+                
+                {/* 3D Mode Toggle */}
+                <div className="flex items-center gap-2">
+                  {is3DMode && (
+                    <select 
+                      value={view3DMode}
+                      onChange={(e) => setView3DMode(e.target.value as any)}
+                      className="bg-transparent border border-[#141414] rounded-sm px-2 py-1 font-mono text-[10px] uppercase tracking-widest outline-none"
+                    >
+                      <option value="planar">Planar Analysis</option>
+                      <option value="wave">Wave Eq.</option>
+                      <option value="heat">Heat Eq.</option>
+                    </select>
+                  )}
+                  <button
+                    onClick={() => setIs3DMode(!is3DMode)}
+                    className={cn(
+                      "flex items-center gap-1 px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors border border-[#141414] rounded-sm",
+                      is3DMode ? "bg-[#141414] text-[#E4E3E0]" : "bg-white hover:bg-slate-100"
+                    )}
+                  >
+                    <Box size={12} />
+                    {is3DMode ? '2D View' : '3D View'}
+                  </button>
+                </div>
+              </div>
               <div className="aspect-square xl:aspect-auto xl:h-[500px]">
-                <GraphView 
-                  data={graphData} 
-                  height={500} 
-                  width={800} 
-                  gravityStrength={gravity}
-                  springConstant={spring}
-                  suggestedEdges={isHardeningMode ? hardeningSolution?.edges : []}
-                  failedNodes={failureScenario?.vertices}
-                  failedEdges={failureScenario?.edges}
-                />
+                {is3DMode ? (
+                  <GraphView3D
+                    data={graphData}
+                    height={500}
+                    width={800}
+                    mode={view3DMode}
+                    fiedlerVector={metrics.fiedlerVector}
+                    showPartition={showPartition}
+                  />
+                ) : (
+                  <GraphView 
+                    data={graphData} 
+                    height={500} 
+                    width={800} 
+                    gravityStrength={gravity}
+                    springConstant={spring}
+                    suggestedEdges={isHardeningMode ? hardeningSolution?.edges : []}
+                    failedNodes={failureScenario?.vertices}
+                    failedEdges={failureScenario?.edges}
+                    fiedlerVector={metrics.fiedlerVector}
+                    showPartition={showPartition}
+                  />
+                )}
               </div>
             </div>
 
             {/* Adjacency Matrix */}
             <div className="flex flex-col gap-4 relative">
-              <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50">
-                Adjacency Matrix (A)
-              </h2>
+              <div className="flex justify-between items-center">
+                <h2 className="font-serif italic text-sm uppercase tracking-widest opacity-50 flex items-center gap-2">
+                  <Calculator size={14} />
+                  Matrix Representation
+                </h2>
+                <div className="flex bg-white border border-[#141414] rounded-sm overflow-hidden">
+                  {(['adjacency', 'degree', 'laplacian'] as MatrixType[]).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setMatrixViewType(type)}
+                      className={cn(
+                        "px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                        matrixViewType === type ? "bg-[#141414] text-[#E4E3E0]" : "hover:bg-slate-100"
+                      )}
+                    >
+                      {type === 'adjacency' ? 'A' : type === 'degree' ? 'D' : 'L'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="relative">
-                <div className={cn((isHardeningMode || failureScenario) && "pointer-events-none")}>
+                <div className={cn((isHardeningMode || failureScenario || matrixViewType !== 'adjacency') && "pointer-events-none")}>
                   <AdjacencyMatrixView 
-                    matrix={matrix} 
+                    matrix={displayMatrix} 
+                    type={matrixViewType}
                     onToggle={handleToggleEdge} 
                     highlightedEdges={isHardeningMode ? hardeningSolution?.edges : []}
                     failedNodes={failureScenario?.vertices}
                     failedEdges={failureScenario?.edges}
                   />
                 </div>
-                {(isHardeningMode || failureScenario) && (
+                {(isHardeningMode || failureScenario || matrixViewType !== 'adjacency') && (
                   <div className="absolute top-2 right-2 flex items-center gap-2 px-2 py-1 bg-[#141414] text-[#E4E3E0] rounded-sm shadow-lg z-20">
                     <Lock size={12} />
-                    <span className="font-mono text-[8px] uppercase tracking-widest">Locked</span>
+                    <span className="font-mono text-[8px] uppercase tracking-widest">
+                      {matrixViewType !== 'adjacency' ? 'Read Only' : 'Locked'}
+                    </span>
                   </div>
                 )}
               </div>
               <p className="text-[10px] font-mono opacity-40 leading-tight">
-                * Click cells to toggle edges. Matrix is symmetric (A = Aᵀ). 
-                Self-loops (diagonal) are disabled.
+                {matrixViewType === 'adjacency' && "* Click cells to toggle edges. Matrix is symmetric (A = Aᵀ). Self-loops (diagonal) are disabled."}
+                {matrixViewType === 'degree' && "* Degree matrix (D): Diagonal contains vertex degrees, off-diagonal is 0."}
+                {matrixViewType === 'laplacian' && "* Laplacian matrix (L = D - A): Diagonal contains degrees, off-diagonal is -1 for connected vertices."}
               </p>
             </div>
           </div>

@@ -17,6 +17,8 @@ interface GraphViewProps {
   suggestedEdges?: GraphEdge[];
   failedNodes?: number[];
   failedEdges?: [number, number][];
+  fiedlerVector?: number[];
+  showPartition?: boolean;
 }
 
 const GraphView: React.FC<GraphViewProps> = ({ 
@@ -27,7 +29,9 @@ const GraphView: React.FC<GraphViewProps> = ({
   springConstant = 100,
   suggestedEdges = [],
   failedNodes = [],
-  failedEdges = []
+  failedEdges = [],
+  fiedlerVector = [],
+  showPartition = false
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -35,9 +39,9 @@ const GraphView: React.FC<GraphViewProps> = ({
     if (!svgRef.current) return;
 
     // Deep copy data to avoid mutating props, and cast to D3 types
-    const nodes: D3Node[] = data.nodes.map(n => ({ ...n }));
-    const edges: D3Edge[] = data.edges.map(e => ({ ...e }));
-    const sEdges: D3Edge[] = suggestedEdges.map(e => ({ ...e }));
+    const nodes: D3Node[] = (data?.nodes || []).map(n => ({ ...n }));
+    const edges: D3Edge[] = (data?.edges || []).map(e => ({ ...e }));
+    const sEdges: D3Edge[] = (suggestedEdges || []).map(e => ({ ...e }));
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -68,13 +72,13 @@ const GraphView: React.FC<GraphViewProps> = ({
       .attr("stroke", d => {
         const s = typeof d.source === 'number' ? d.source : (d.source as any).id;
         const t = typeof d.target === 'number' ? d.target : (d.target as any).id;
-        const isFailed = failedEdges.some(([u, v]) => (u === s && v === t) || (u === t && v === s));
+        const isFailed = (failedEdges || []).some(([u, v]) => (u === s && v === t) || (u === t && v === s));
         return isFailed ? "#f43f5e" : "#141414";
       })
       .attr("stroke-dasharray", d => {
         const s = typeof d.source === 'number' ? d.source : (d.source as any).id;
         const t = typeof d.target === 'number' ? d.target : (d.target as any).id;
-        const isFailed = failedEdges.some(([u, v]) => (u === s && v === t) || (u === t && v === s));
+        const isFailed = (failedEdges || []).some(([u, v]) => (u === s && v === t) || (u === t && v === s));
         return isFailed ? "4,4" : null;
       });
 
@@ -89,8 +93,20 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     node.append("circle")
       .attr("r", 12)
-      .attr("fill", d => failedNodes.includes(d.id) ? "#f43f5e" : "#E4E3E0")
-      .attr("stroke", d => failedNodes.includes(d.id) ? "#be123c" : "#141414")
+      .attr("fill", d => {
+        if ((failedNodes || []).includes(d.id)) return "#f43f5e";
+        if (showPartition && fiedlerVector && fiedlerVector[d.id] !== undefined) {
+          return fiedlerVector[d.id] > 0 ? "#818cf8" : "#fbbf24"; // Indigo vs Amber
+        }
+        return "#E4E3E0";
+      })
+      .attr("stroke", d => {
+        if (failedNodes.includes(d.id)) return "#be123c";
+        if (showPartition && fiedlerVector && fiedlerVector[d.id] !== undefined) {
+          return fiedlerVector[d.id] > 0 ? "#4f46e5" : "#d97706";
+        }
+        return "#141414";
+      })
       .attr("stroke-width", 2)
       .attr("opacity", d => failedNodes.includes(d.id) ? 0.4 : 1);
 
@@ -102,7 +118,13 @@ const GraphView: React.FC<GraphViewProps> = ({
       .attr("font-size", "10px")
       .attr("font-family", "monospace")
       .attr("pointer-events", "none")
-      .attr("fill", d => failedNodes.includes(d.id) ? "#fff" : "#141414");
+      .attr("fill", d => {
+        if (failedNodes.includes(d.id)) return "#fff";
+        if (showPartition && fiedlerVector && fiedlerVector[d.id] !== undefined) {
+          return "#141414";
+        }
+        return "#141414";
+      });
 
     simulation.on("tick", () => {
       suggestedLink
@@ -139,7 +161,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     }
 
     return () => simulation.stop();
-  }, [data, width, height, gravityStrength, springConstant, suggestedEdges, failedNodes, failedEdges]);
+  }, [data, width, height, gravityStrength, springConstant, suggestedEdges, failedNodes, failedEdges, fiedlerVector, showPartition]);
 
   return (
     <div className="border border-[#141414] bg-[#E4E3E0] overflow-hidden rounded-sm h-full">

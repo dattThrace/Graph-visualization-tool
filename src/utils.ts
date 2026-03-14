@@ -1,6 +1,8 @@
 import { AdjacencyMatrix, GraphData, GraphMetrics, Node, Edge, FaultCondition } from './types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { getLaplacianMatrix, matrixPower, trace } from './math/matrix';
+import { jacobiEigenvalue } from './math/eigen';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -26,17 +28,19 @@ export function matrixToGraph(matrix: AdjacencyMatrix): GraphData {
 }
 
 export function graphToMatrix(nodes: Node[], edges: Edge[]): AdjacencyMatrix {
-  const n = nodes.length;
+  const n = nodes?.length || 0;
   const matrix: AdjacencyMatrix = Array.from({ length: n }, () => Array(n).fill(0));
 
-  edges.forEach(edge => {
-    const s = typeof edge.source === 'number' ? edge.source : (edge.source as any).id;
-    const t = typeof edge.target === 'number' ? edge.target : (edge.target as any).id;
-    if (s < n && t < n) {
-      matrix[s][t] = 1;
-      matrix[t][s] = 1;
-    }
-  });
+  if (edges) {
+    edges.forEach(edge => {
+      const s = parseInt(typeof edge.source === 'string' ? edge.source : (edge.source as any).id);
+      const t = parseInt(typeof edge.target === 'string' ? edge.target : (edge.target as any).id);
+      if (s < n && t < n) {
+        matrix[s][t] = 1;
+        matrix[t][s] = 1;
+      }
+    });
+  }
 
   return matrix;
 }
@@ -82,6 +86,36 @@ export function calculateMetrics(matrix: AdjacencyMatrix): GraphMetrics {
     }
   }
 
+  // Algebraic Connectivity (Fiedler value)
+  let algebraicConnectivity = 0;
+  let fiedlerVector: number[] | undefined;
+  let spectrum: number[] | undefined;
+  let fiedlerIndex = 1;
+
+  if (n > 1) {
+    const L = getLaplacianMatrix(matrix);
+    const { eigenvalues, eigenvectors } = jacobiEigenvalue(L);
+    
+    // Clean up floating point inaccuracies
+    spectrum = eigenvalues.map(e => Math.abs(e) < 1e-7 ? 0 : e);
+    
+    // Find the first non-zero eigenvalue (or default to 1 if all are zero)
+    fiedlerIndex = spectrum.findIndex((e, i) => i > 0 && e > 1e-7);
+    if (fiedlerIndex === -1) fiedlerIndex = 1;
+
+    algebraicConnectivity = spectrum[fiedlerIndex] || 0;
+    
+    // Extract the Fiedler vector
+    fiedlerVector = eigenvectors.map(row => row[fiedlerIndex]);
+  }
+
+  // Triangles: Tr(A^3) / 6
+  let triangles = 0;
+  if (n >= 3) {
+    const A3 = matrixPower(matrix, 3);
+    triangles = Math.round(trace(A3) / 6);
+  }
+
   return {
     nodeCount: n,
     edgeCount,
@@ -93,6 +127,11 @@ export function calculateMetrics(matrix: AdjacencyMatrix): GraphMetrics {
     components,
     isSimple: true, // Assumed by constraints
     isComplete: edgeCount === (n * (n - 1)) / 2 && n > 0,
+    algebraicConnectivity,
+    triangles,
+    fiedlerVector,
+    spectrum,
+    fiedlerIndex
   };
 }
 
@@ -219,9 +258,9 @@ export function evaluateFaultCondition(matrix: AdjacencyMatrix, condition: Fault
     return !canDisconnect(matrix, condition.vertices, condition.edges);
   } else {
     if (condition.op === 'AND') {
-      return condition.conditions.every(c => evaluateFaultCondition(matrix, c));
+      return (condition.conditions || []).every(c => evaluateFaultCondition(matrix, c));
     } else {
-      return condition.conditions.some(c => evaluateFaultCondition(matrix, c));
+      return (condition.conditions || []).some(c => evaluateFaultCondition(matrix, c));
     }
   }
 }
