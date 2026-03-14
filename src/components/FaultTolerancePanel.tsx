@@ -197,7 +197,7 @@ const FaultTolerancePanel: React.FC<FaultTolerancePanelProps> = ({
                   </div>
                 </div>
 
-                {idx < conditions.length - 1 && (
+                {(idx < (conditions?.length || 0) - 1) && (
                   <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-10 bg-[#141414] text-[#E4E3E0] px-2 py-0.5 font-mono text-[8px] uppercase tracking-widest">
                     {globalOp}
                   </div>

@@ -1,7 +1,9 @@
 export function multiplyMatrices(a: number[][], b: number[][]): number[][] {
   const n = a.length;
-  const m = b[0].length;
+  if (n === 0) return [];
   const p = b.length;
+  if (p === 0) return Array.from({ length: n }, () => []);
+  const m = b[0]?.length || 0;
   const result = Array.from({ length: n }, () => Array(m).fill(0));
 
   for (let i = 0; i < n; i++) {

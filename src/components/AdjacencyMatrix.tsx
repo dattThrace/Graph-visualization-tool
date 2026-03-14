@@ -24,7 +24,7 @@ const AdjacencyMatrixView: React.FC<AdjacencyMatrixProps> = ({
   failedNodes = [],
   failedEdges = []
 }) => {
-  const n = matrix.length;
+  const n = matrix?.length || 0;
 
   const isHighlighted = (i: number, j: number) => {
     return (highlightedEdges || []).some(e => 
@@ -37,6 +37,8 @@ const AdjacencyMatrixView: React.FC<AdjacencyMatrixProps> = ({
       (u === i && v === j) || (u === j && v === i)
     );
   };
+
+  if (!matrix || !Array.isArray(matrix)) return null;
 
   return (
     <div className="flex flex-col gap-1 p-4 bg-[#E4E3E0] border border-[#141414] rounded-sm overflow-auto max-h-[600px]">
@@ -60,7 +62,7 @@ const AdjacencyMatrixView: React.FC<AdjacencyMatrixProps> = ({
         })}
       </div>
       
-      {matrix.map((row, i) => {
+      {(matrix || []).map((row, i) => {
         const isRowFailed = (failedNodes || []).includes(i);
         return (
           <div key={i} className="flex">
@@ -70,7 +72,7 @@ const AdjacencyMatrixView: React.FC<AdjacencyMatrixProps> = ({
             )}>
               {i}
             </div>
-            {row.map((val, j) => {
+            {(row || []).map((val, j) => {
               const isSelf = i === j;
               const highlighted = isHighlighted(i, j);
               const failed = isFailedEdge(i, j);

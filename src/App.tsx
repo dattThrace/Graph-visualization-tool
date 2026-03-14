@@ -51,7 +51,7 @@ export default function App() {
 
   const handleToggleEdge = (i: number, j: number) => {
     if (i === j || isHardeningMode || failureScenario || matrixViewType !== 'adjacency') return;
-    const newMatrix = matrix.map(row => [...row]);
+    const newMatrix = (matrix || []).map(row => [...(row || [])]);
     const newVal = newMatrix[i][j] === 1 ? 0 : 1;
     newMatrix[i][j] = newVal;
     newMatrix[j][i] = newVal; // Symmetric

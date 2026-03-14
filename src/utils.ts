@@ -31,7 +31,7 @@ export function graphToMatrix(nodes: Node[], edges: Edge[]): AdjacencyMatrix {
   const n = nodes?.length || 0;
   const matrix: AdjacencyMatrix = Array.from({ length: n }, () => Array(n).fill(0));
 
-  if (edges) {
+  if (Array.isArray(edges)) {
     edges.forEach(edge => {
       const s = parseInt(typeof edge.source === 'string' ? edge.source : (edge.source as any).id);
       const t = parseInt(typeof edge.target === 'string' ? edge.target : (edge.target as any).id);
@@ -97,16 +97,16 @@ export function calculateMetrics(matrix: AdjacencyMatrix): GraphMetrics {
     const { eigenvalues, eigenvectors } = jacobiEigenvalue(L);
     
     // Clean up floating point inaccuracies
-    spectrum = eigenvalues.map(e => Math.abs(e) < 1e-7 ? 0 : e);
+    spectrum = (eigenvalues || []).map(e => Math.abs(e) < 1e-7 ? 0 : e);
     
     // Find the first non-zero eigenvalue (or default to 1 if all are zero)
-    fiedlerIndex = spectrum.findIndex((e, i) => i > 0 && e > 1e-7);
+    fiedlerIndex = (spectrum || []).findIndex((e, i) => i > 0 && e > 1e-7);
     if (fiedlerIndex === -1) fiedlerIndex = 1;
 
-    algebraicConnectivity = spectrum[fiedlerIndex] || 0;
+    algebraicConnectivity = spectrum ? (spectrum[fiedlerIndex] || 0) : 0;
     
     // Extract the Fiedler vector
-    fiedlerVector = eigenvectors.map(row => row[fiedlerIndex]);
+    fiedlerVector = (eigenvectors || []).map(row => row[fiedlerIndex]);
   }
 
   // Triangles: Tr(A^3) / 6
@@ -218,7 +218,7 @@ export function findCutSet(matrix: AdjacencyMatrix, vCount: number, eCount: numb
 
       for (const edgesToRemove of getCombinations(remainingEdges, eCount)) {
         // Test connectivity
-        const testMatrix = matrix.map(row => [...row]);
+        const testMatrix = (matrix || []).map(row => [...(row || [])]);
         // Remove vertices
         const nodesToKeep = allNodes.filter(node => !nodesToRemove.includes(node));
         // Remove edges
@@ -272,6 +272,7 @@ export interface HardeningSolution {
 }
 
 export function findMinimumHardeningEdges(matrix: AdjacencyMatrix, condition: FaultCondition): HardeningSolution | null {
+  if (!matrix || !Array.isArray(matrix)) return null;
   const n = matrix.length;
   if (evaluateFaultCondition(matrix, condition)) {
     return { edges: [], isUnique: true, minEdges: 0 };
@@ -280,7 +281,7 @@ export function findMinimumHardeningEdges(matrix: AdjacencyMatrix, condition: Fa
   const missingEdges: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      if (matrix[i][j] === 0) {
+      if (matrix[i] && matrix[i][j] === 0) {
         missingEdges.push([i, j]);
       }
     }
@@ -289,7 +290,7 @@ export function findMinimumHardeningEdges(matrix: AdjacencyMatrix, condition: Fa
   // Try adding 1 edge
   const solutions1: [number, number][][] = [];
   for (const edge of missingEdges) {
-    const testMatrix = matrix.map(row => [...row]);
+    const testMatrix = matrix.map(row => [...(row || [])]);
     testMatrix[edge[0]][edge[1]] = 1;
     testMatrix[edge[1]][edge[0]] = 1;
     if (evaluateFaultCondition(testMatrix, condition)) {
@@ -312,7 +313,7 @@ export function findMinimumHardeningEdges(matrix: AdjacencyMatrix, condition: Fa
       for (let j = i + 1; j < missingEdges.length; j++) {
         const e1 = missingEdges[i];
         const e2 = missingEdges[j];
-        const testMatrix = matrix.map(row => [...row]);
+        const testMatrix = matrix.map(row => [...(row || [])]);
         testMatrix[e1[0]][e1[1]] = 1;
         testMatrix[e1[1]][e1[0]] = 1;
         testMatrix[e2[0]][e2[1]] = 1;
@@ -335,7 +336,7 @@ export function findMinimumHardeningEdges(matrix: AdjacencyMatrix, condition: Fa
   }
 
   // Greedy fallback
-  let currentMatrix = matrix.map(row => [...row]);
+  let currentMatrix = matrix.map(row => [...(row || [])]);
   const addedEdges: Edge[] = [];
   for (let k = 0; k < 5; k++) {
     let bestEdge: [number, number] | null = null;
